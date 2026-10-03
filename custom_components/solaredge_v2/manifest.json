@@ -1,0 +1,13 @@
+{
+  "domain": "solaredge_v2",
+  "name": "SolarEdge ONE (v2 API)",
+  "codeowners": [
+    "@mgillmann"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/mgillmann/ha-solaredge-v2",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/mgillmann/ha-solaredge-v2/issues",
+  "requirements": [],
+  "version": "0.2.0"
+}

@@ -1,0 +1,17 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "SolarEdge ONE (v2 API)",
+        "description": "Enter your site ID and OAuth credentials. The refresh token must be obtained once out of band, because SolarEdge does not return the OAuth state parameter that Home Assistant's built-in flow requires.",
+        "data": {
+          "site_id": "Site ID",
+          "client_id": "Client ID",
+          "client_secret": "Client secret",
+          "refresh_token": "Refresh token"
+        }
+      }
+    },
+    "abort": { "already_configured": "This SolarEdge site is already configured" }
+  }
+}

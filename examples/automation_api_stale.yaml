@@ -1,0 +1,21 @@
+# Example: alert when the SolarEdge API stops reporting.
+# Replace <SITEID> with your site ID (see the entity IDs the integration creates).
+# Being unavailable for 6 hours usually means an API or token problem, not that
+# the inverter is down.
+- alias: SolarEdge API stale
+  triggers:
+    - trigger: state
+      entity_id: sensor.solaredge_site_<SITEID>_energy_today
+      to:
+        - unavailable
+        - unknown
+      for:
+        hours: 6
+  actions:
+    - action: notify.persistent_notification
+      data:
+        title: SolarEdge API
+        message: >-
+          SolarEdge production data has been unavailable for 6 hours. This is
+          an API or token problem, not necessarily an inverter fault.
+  mode: single
