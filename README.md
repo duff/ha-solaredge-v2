@@ -25,7 +25,6 @@ A small custom integration that reads solar production from the **SolarEdge ONE 
 ## Getting the first refresh token
 
 1. Open SolarEdge's OAuth **authorize** URL in a browser with your client ID and redirect URI, then log in and approve access.
-   > **TODO:** add the exact authorize URL and parameters from the SolarEdge API docs here.
 2. You're redirected to your redirect URI. Copy the `code` value from the address bar (the page itself may fail to load; that's fine).
 3. Exchange the code for tokens straight away, because codes expire quickly:
 
@@ -57,6 +56,18 @@ A small custom integration that reads solar production from the **SolarEdge ONE 
 2. Enter your **Site ID**, **Client ID**, **Client Secret** and **Refresh token**.
 3. The sensors appear under a device named `SolarEdge site <SITEID>`.
 
+### Settings (after setup)
+
+Open **Settings → Devices & Services → SolarEdge ONE (v2 API)**:
+
+- **Configure** (polling options):
+  - **Update interval**: minutes between API calls, 15–240 (default 30). The data has 15-minute resolution, so polling faster gains nothing.
+  - **Only poll while the sun is up**: skips API calls between sunset and sunrise to save credits. Today's totals are kept overnight and reset at midnight. This lets you poll every 15 minutes during the day and still stay within the free tier.
+- **⋮ → Reconfigure**: replace the Client ID, Client Secret and refresh token without removing the integration.
+- **Re-authenticate**: if SolarEdge rejects the stored token, HA shows a repair notice. Paste a new refresh token there.
+
+Changes to the polling options apply immediately; no restart needed.
+
 ### Energy dashboard
 
 **Settings → Dashboards → Energy → Solar production → Add solar production:**
@@ -72,8 +83,8 @@ See [`examples/automation_api_stale.yaml`](examples/automation_api_stale.yaml). 
 ## Things to know
 
 - **SolarEdge issues a new refresh token every time the old one is used.** The integration saves the new token back to its config entry after each refresh. If you write your own client and skip this, it stops working after the first refresh.
-- **Credit budget.** The free tier allows about 2,000 API credits per month. The integration polls once every **30 minutes** (about 1,440 calls a month) and makes one call to `/v2/sites/{siteId}/power`. That call returns the whole day in 15-minute steps, so current power, today's energy and today's peak all come from one request. Polling much faster will use up the budget, and you'll start seeing 429 errors. The interval is set by `UPDATE_INTERVAL` in `const.py`.
-- **If authentication breaks** (401 errors, or the token refresh fails), HA flags the integration as needing reauth. Get a new refresh token using the steps above, delete the integration entry, and add it again.
+- **Credit budget.** The free tier allows about 2,000 API credits per month. Each update is one call to `/v2/sites/{siteId}/power`, which returns the whole day in 15-minute steps, so current power, today's energy and today's peak all come from one request. The default of every **30 minutes** is about 1,440 calls a month. Every 15 minutes all day (about 2,900) goes over the limit and you'll start seeing 429 errors, unless you also turn on **Only poll while the sun is up**.
+- **If authentication breaks** (401 errors, or the token refresh fails), HA flags the integration as needing re-authentication. Get a new refresh token using the steps above and paste it into the re-authenticate prompt.
 - **Not needed:** an entry under Application Credentials, or the old built-in `solaredge` integration. Remove any left over from earlier attempts.
 
 ## Debug logging

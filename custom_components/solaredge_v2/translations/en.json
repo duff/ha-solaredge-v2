@@ -3,15 +3,65 @@
     "step": {
       "user": {
         "title": "SolarEdge ONE (v2 API)",
-        "description": "Enter your site ID and OAuth credentials. The refresh token must be obtained once out of band, because SolarEdge does not return the OAuth state parameter that Home Assistant's built-in flow requires.",
+        "description": "Enter your site ID and OAuth credentials. The refresh token must be obtained once outside Home Assistant, because SolarEdge does not return the OAuth state parameter that Home Assistant's built-in flow requires.",
         "data": {
           "site_id": "Site ID",
           "client_id": "Client ID",
           "client_secret": "Client secret",
           "refresh_token": "Refresh token"
+        },
+        "data_description": {
+          "site_id": "Shown in the SolarEdge monitoring portal.",
+          "client_id": "OAuth client ID from your app in the SolarEdge developer portal.",
+          "client_secret": "OAuth client secret from the same app.",
+          "refresh_token": "Obtained once outside Home Assistant (see the project README). SolarEdge issues a new one on every refresh and the integration stores it automatically."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate SolarEdge",
+        "description": "SolarEdge rejected the stored token. Get a new refresh token (see the project README) and paste it here.",
+        "data": {
+          "refresh_token": "Refresh token"
+        },
+        "data_description": {
+          "refresh_token": "Obtained once outside Home Assistant (see the project README). SolarEdge issues a new one on every refresh and the integration stores it automatically."
+        }
+      },
+      "reconfigure": {
+        "title": "Update SolarEdge credentials",
+        "description": "Replace the OAuth credentials for this site. The site ID cannot be changed here; add a new entry for a different site.",
+        "data": {
+          "client_id": "Client ID",
+          "client_secret": "Client secret",
+          "refresh_token": "Refresh token"
+        },
+        "data_description": {
+          "client_id": "OAuth client ID from your app in the SolarEdge developer portal.",
+          "client_secret": "OAuth client secret from the same app.",
+          "refresh_token": "Obtained once outside Home Assistant (see the project README). SolarEdge issues a new one on every refresh and the integration stores it automatically."
         }
       }
     },
-    "abort": { "already_configured": "This SolarEdge site is already configured" }
+    "abort": {
+      "already_configured": "This SolarEdge site is already configured",
+      "reauth_successful": "Re-authentication was successful",
+      "reconfigure_successful": "Credentials updated"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "SolarEdge polling",
+        "description": "The free API tier allows about 2,000 calls a month. Every 30 minutes all day is about 1,440; every 15 minutes all day (about 2,900) exceeds it unless polling is limited to daylight.",
+        "data": {
+          "scan_interval": "Update interval",
+          "daylight_only": "Only poll while the sun is up"
+        },
+        "data_description": {
+          "scan_interval": "Minutes between API calls (15-240). Data has 15-minute resolution, so polling faster gains nothing.",
+          "daylight_only": "Skip API calls between sunset and sunrise to save credits. Today's totals are kept overnight and reset at midnight."
+        }
+      }
+    }
   }
 }
