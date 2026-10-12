@@ -269,10 +269,10 @@ class SolarEdgeV2Coordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_site(self, today) -> dict[str, Any]:
         """Return today's site meter data, fetching it when due.
 
-        Meter telemetry gives totals and 15-minute power. Without import or
-        export meters it falls back to Site Overview totals. Errors other
-        than an auth failure keep the last values so one bad call does not
-        blank the other sensors too.
+        Meter telemetry gives totals and 15-minute power. If it fails, or the
+        site has no import or export meter, the totals come from Site
+        Overview instead. Errors other than an auth failure keep the last
+        values so one bad call does not blank the other sensors too.
         """
         minutes = SITE_DAY_MINUTES if is_up(self.hass) else SITE_NIGHT_MINUTES
         if (
@@ -281,21 +281,20 @@ class SolarEdgeV2Coordinator(DataUpdateCoordinator[dict[str, Any]]):
         ):
             return self._site
 
+        # V2 rejects times without a zone; send UTC so no "+" needs escaping.
         now = dt_util.now()
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         meters = await self._async_get(
             "meters/telemetry",
             {
                 "resolution": "QUARTER_HOUR",
-                "from": start.strftime("%Y-%m-%dT%H:%M:%S"),
-                "to": now.strftime("%Y-%m-%dT%H:%M:%S"),
+                "from": dt_util.as_utc(start).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "to": dt_util.as_utc(now).strftime("%Y-%m-%dT%H:%M:%SZ"),
             },
         )
-        if meters is None:
-            return self._site
-        parsed = _site_from_meters(meters.get("meters") or {})
+        parsed = _site_from_meters(meters.get("meters") or {}) if meters else None
         if parsed is None:
-            if not self._logged_meters:
+            if meters is not None and not self._logged_meters:
                 _LOGGER.info("SolarEdge meters report no import or export; using Site Overview")
                 self._logged_meters = True
             overview = await self._async_get("overview")
@@ -342,10 +341,17 @@ class SolarEdgeV2Coordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if resp.status == 401:
                     raise ConfigEntryAuthFailed("SolarEdge rejected the access token")
                 if resp.status != 200:
+                    try:
+                        problem = await resp.json(content_type=None)
+                    except (aiohttp.ClientError, ValueError):
+                        problem = None
+                    detail = (
+                        problem.get("detail") or problem.get("title") or problem.get("message")
+                        if isinstance(problem, dict)
+                        else None
+                    )
                     _LOGGER.warning(
-                        "SolarEdge %s returned %s; keeping the last values",
-                        path,
-                        resp.status,
+                        "SolarEdge %s returned %s (%s)", path, resp.status, detail
                     )
                     return None
                 body = await resp.json()
