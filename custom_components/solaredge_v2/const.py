@@ -26,5 +26,12 @@ MIN_SCAN_INTERVAL = 15
 MAX_SCAN_INTERVAL = 240
 DEFAULT_DAYLIGHT_ONLY = False
 
+# Site Overview (today's production, consumption and grid totals from the
+# site meter) is fetched on its own schedule: hourly while the sun is up,
+# every two hours at night, and once at 23:57 so the day's last totals land.
+# About 19 calls a day (~570 a month).
+OVERVIEW_DAY_MINUTES = 60
+OVERVIEW_NIGHT_MINUTES = 120
+
 # Refresh the access token this long before it actually expires.
 TOKEN_EXPIRY_MARGIN = 300

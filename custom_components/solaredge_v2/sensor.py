@@ -62,6 +62,49 @@ SENSORS: tuple[SolarEdgeSensorDescription, ...] = (
         icon="mdi:chart-bell-curve",
         value_fn=lambda d: d.get("peak_power"),
     ),
+    # Site Overview: today's totals from the SolarEdge site meter. With a
+    # meter at the utility connection these cover the whole site, so they
+    # suit the Energy dashboard's grid and solar sources.
+    SolarEdgeSensorDescription(
+        key="site_production",
+        translation_key="site_production",
+        name="Site production today",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:solar-power-variant",
+        value_fn=lambda d: d.get("site_production"),
+    ),
+    SolarEdgeSensorDescription(
+        key="site_consumption",
+        translation_key="site_consumption",
+        name="Site consumption today",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:home-lightning-bolt",
+        value_fn=lambda d: d.get("site_consumption"),
+    ),
+    SolarEdgeSensorDescription(
+        key="site_from_grid",
+        translation_key="site_from_grid",
+        name="Grid import today",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:transmission-tower-import",
+        value_fn=lambda d: d.get("site_from_grid"),
+    ),
+    SolarEdgeSensorDescription(
+        key="site_to_grid",
+        translation_key="site_to_grid",
+        name="Grid export today",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:transmission-tower-export",
+        value_fn=lambda d: d.get("site_to_grid"),
+    ),
 )
 
 

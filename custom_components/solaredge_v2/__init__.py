@@ -11,9 +11,10 @@ import aiohttp
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import aiohttp_client
+from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.sun import is_up
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -31,6 +32,8 @@ from .const import (
     DEFAULT_DAYLIGHT_ONLY,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
+    OVERVIEW_DAY_MINUTES,
+    OVERVIEW_NIGHT_MINUTES,
     TOKEN_EXPIRY_MARGIN,
     TOKEN_URL,
 )
@@ -44,6 +47,19 @@ EMPTY_DAY: dict[str, Any] = {
 }
 
 _LOGGER = logging.getLogger(__name__)
+
+UNIT_TO_KWH = {"WH": 0.001, "KWH": 1.0, "MWH": 1000.0}
+
+
+def _kwh(section: dict[str, Any], key: str) -> float | None:
+    """Return one Site Overview total in kWh, or None if it is missing."""
+    value = section.get(key)
+    if value is None:
+        return None
+    unit = str(section.get("unit") or section.get("units") or "WH").upper()
+    return round(value * UNIT_TO_KWH.get(unit, 0.001), 3)
+
+
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
 
@@ -56,6 +72,9 @@ class SolarEdgeV2Coordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.site_id = str(entry.data[CONF_SITE_ID])
         self._session = aiohttp_client.async_get_clientsession(hass)
         self._last_fetch_date = None
+        self._overview: dict[str, Any] = {}
+        self._overview_at = 0.0
+        self._overview_date = None
         self.apply_options()
 
     def apply_options(self) -> None:
@@ -114,15 +133,70 @@ class SolarEdgeV2Coordinator(DataUpdateCoordinator[dict[str, Any]]):
         _LOGGER.debug("SolarEdge token refreshed; expires in %ss", body.get("expires_in"))
         return body["access_token"]
 
+    def force_overview(self) -> None:
+        """Make the next update fetch Site Overview regardless of schedule."""
+        self._overview_at = 0.0
+
     async def _async_update_data(self) -> dict[str, Any]:
         today = dt_util.now().date()
         if self.daylight_only and self.data is not None and not is_up(self.hass):
             # Save API credits overnight. Keep today's totals, but start a
             # fresh day at midnight so energy_today does not carry over.
             if self._last_fetch_date == today:
-                return {**self.data, "current_power": 0.0}
-            return dict(EMPTY_DAY)
+                day = {**self.data, "current_power": 0.0}
+            else:
+                day = dict(EMPTY_DAY)
+        else:
+            day = await self._async_fetch_power(today)
+        return {**day, **await self._async_overview(today)}
 
+    async def _async_overview(self, today) -> dict[str, Any]:
+        """Return today's site meter totals, fetching Site Overview when due.
+
+        Errors other than an auth failure keep the last totals so one bad
+        call does not blank the power sensors too.
+        """
+        minutes = OVERVIEW_DAY_MINUTES if is_up(self.hass) else OVERVIEW_NIGHT_MINUTES
+        if (
+            self._overview_date == today
+            and time.time() - self._overview_at < minutes * 60 - 30
+        ):
+            return self._overview
+
+        token = await self._async_ensure_token()
+        url = f"{API_BASE}/sites/{self.site_id}/overview"
+        try:
+            async with self._session.get(
+                url,
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            ) as resp:
+                if resp.status == 401:
+                    raise ConfigEntryAuthFailed("SolarEdge rejected the access token")
+                if resp.status != 200:
+                    _LOGGER.warning(
+                        "SolarEdge Site Overview returned %s; keeping the last totals",
+                        resp.status,
+                    )
+                    return self._overview
+                payload = await resp.json()
+        except aiohttp.ClientError as err:
+            _LOGGER.warning("Error fetching SolarEdge Site Overview: %s", err)
+            return self._overview
+
+        production = payload.get("production") or {}
+        consumption = payload.get("consumption") or {}
+        self._overview = {
+            "site_production": _kwh(production, "total"),
+            "site_consumption": _kwh(consumption, "total"),
+            "site_from_grid": _kwh(consumption, "fromGrid"),
+            "site_to_grid": _kwh(production, "toGrid"),
+        }
+        self._overview_at = time.time()
+        self._overview_date = today
+        return self._overview
+
+    async def _async_fetch_power(self, today) -> dict[str, Any]:
+        """Fetch the day's power curve and derive power, energy and peak."""
         token = await self._async_ensure_token()
         url = f"{API_BASE}/sites/{self.site_id}/power"
         try:
@@ -164,6 +238,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_config_entry_first_refresh()
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
+
+    @callback
+    def _async_day_end(_now) -> None:
+        """Fetch the day's last Site Overview totals before midnight."""
+        coordinator.force_overview()
+        hass.async_create_task(coordinator.async_request_refresh())
+
+    entry.async_on_unload(
+        async_track_time_change(hass, _async_day_end, hour=23, minute=57, second=0)
+    )
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
