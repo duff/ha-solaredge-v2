@@ -100,6 +100,26 @@ def _day_from_points(points: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _with_consumption(site: dict[str, Any]) -> dict[str, Any]:
+    """Fill consumption from production + import - export when no meter has it."""
+    site = dict(site)
+    for out, prod, imp, exp, digits in (
+        ("site_consumption", "site_production", "site_from_grid", "site_to_grid", 3),
+        (
+            "site_consumption_power",
+            "site_production_power",
+            "grid_import_power",
+            "grid_export_power",
+            1,
+        ),
+    ):
+        if site.get(out) is None and all(
+            site.get(k) is not None for k in (prod, imp, exp)
+        ):
+            site[out] = round(site[prod] + site[imp] - site[exp], digits)
+    return site
+
+
 def _site_from_meters(
     meters: dict[str, Any],
 ) -> tuple[dict[str, Any], list[dict[str, Any]] | None] | None:
@@ -140,20 +160,6 @@ def _site_from_meters(
             (s[-1][0] for s in power.values() if s), default=None
         ),
     }
-    # No consumption meter: consumption = production + import - export.
-    parts = ("site_production", "site_from_grid", "site_to_grid")
-    if site["site_consumption"] is None and all(site[k] is not None for k in parts):
-        site["site_consumption"] = round(
-            site["site_production"] + site["site_from_grid"] - site["site_to_grid"], 3
-        )
-    parts = ("site_production_power", "grid_import_power", "grid_export_power")
-    if site["site_consumption_power"] is None and all(site[k] is not None for k in parts):
-        site["site_consumption_power"] = round(
-            site["site_production_power"]
-            + site["grid_import_power"]
-            - site["grid_export_power"],
-            1,
-        )
     curve = (
         [{"timestamp": t, "value": v} for t, v in power["production"]]
         if power["production"] is not None
@@ -264,7 +270,13 @@ class SolarEdgeV2Coordinator(DataUpdateCoordinator[dict[str, Any]]):
                 day = dict(EMPTY_DAY)
         else:
             day = await self._async_fetch_power(today)
-        return {**day, **site}
+        site = dict(site)
+        # Import/export-only meters: production comes from the inverters.
+        if site.get("site_production") is None and site.get("site_from_grid") is not None:
+            site["site_production"] = day.get("energy_today")
+        if site.get("site_production_power") is None and site.get("grid_import_power") is not None:
+            site["site_production_power"] = day.get("current_power")
+        return {**day, **_with_consumption(site)}
 
     async def _async_site(self, today) -> dict[str, Any]:
         """Return today's site meter data, fetching it when due.
