@@ -114,11 +114,18 @@ class SolarEdgeV2Coordinator(DataUpdateCoordinator[dict[str, Any]]):
                     "Accept": "application/json",
                 },
             ) as resp:
-                body = await resp.json()
-                if resp.status != 200:
+                # Only a rejected grant needs a new refresh token. A server
+                # error or rate limit is retried on the next update; asking
+                # for reauth then would stop polling for nothing.
+                if resp.status in (400, 401):
                     raise ConfigEntryAuthFailed(
-                        f"Token refresh failed ({resp.status}): {body}"
+                        f"SolarEdge rejected the refresh token ({resp.status})"
                     )
+                if resp.status != 200:
+                    raise UpdateFailed(
+                        f"Token refresh failed ({resp.status}); will retry"
+                    )
+                body = await resp.json()
         except aiohttp.ClientError as err:
             raise UpdateFailed(f"Token refresh error: {err}") from err
 
