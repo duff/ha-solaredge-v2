@@ -105,7 +105,55 @@ SENSORS: tuple[SolarEdgeSensorDescription, ...] = (
         icon="mdi:transmission-tower-export",
         value_fn=lambda d: d.get("site_to_grid"),
     ),
+    # Site meters: latest 15-minute power, for the Energy dashboard's flow.
+    SolarEdgeSensorDescription(
+        key="site_production_power",
+        translation_key="site_production_power",
+        name="Site production power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:solar-power",
+        value_fn=lambda d: d.get("site_production_power"),
+    ),
+    SolarEdgeSensorDescription(
+        key="site_consumption_power",
+        translation_key="site_consumption_power",
+        name="Site consumption power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:home-lightning-bolt",
+        value_fn=lambda d: d.get("site_consumption_power"),
+    ),
+    SolarEdgeSensorDescription(
+        key="grid_import_power",
+        translation_key="grid_import_power",
+        name="Grid import power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:transmission-tower-import",
+        value_fn=lambda d: d.get("grid_import_power"),
+    ),
+    SolarEdgeSensorDescription(
+        key="grid_export_power",
+        translation_key="grid_export_power",
+        name="Grid export power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:transmission-tower-export",
+        value_fn=lambda d: d.get("grid_export_power"),
+    ),
 )
+
+SITE_POWER_KEYS = {
+    "site_production_power",
+    "site_consumption_power",
+    "grid_import_power",
+    "grid_export_power",
+}
 
 
 async def async_setup_entry(
@@ -155,6 +203,12 @@ class SolarEdgeV2Sensor(CoordinatorEntity[SolarEdgeV2Coordinator], SensorEntity)
         data = self.coordinator.data or {}
         if self.entity_description.key == "peak_power_today":
             return {"peak_time": data.get("peak_time")}
+        if self.entity_description.key in SITE_POWER_KEYS:
+            return {
+                "resolution": "15 minutes",
+                "as_of": data.get("site_power_as_of"),
+                "note": "Latest 15-minute average from the site meters, not live",
+            }
         if self.entity_description.key == "current_power":
             return {
                 "resolution": "15 minutes",

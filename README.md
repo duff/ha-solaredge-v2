@@ -15,12 +15,16 @@ A small custom integration that reads solar production from the **SolarEdge ONE 
 | `sensor.solaredge_site_<SITEID>_current_power` | W | Latest 15-minute sample, not live wattage |
 | `sensor.solaredge_site_<SITEID>_energy_today` | kWh | `total_increasing`, resets at midnight. Use this one in the Energy dashboard |
 | `sensor.solaredge_site_<SITEID>_peak_power_today` | W | Includes a `peak_time` attribute |
-| `sensor.solaredge_site_<SITEID>_site_production_today` | kWh | Site Overview: today's production from the site meter, all inverters |
-| `sensor.solaredge_site_<SITEID>_site_consumption_today` | kWh | Site Overview: today's consumption |
-| `sensor.solaredge_site_<SITEID>_grid_import_today` | kWh | Site Overview: today's import from the grid |
-| `sensor.solaredge_site_<SITEID>_grid_export_today` | kWh | Site Overview: today's export to the grid |
+| `sensor.solaredge_site_<SITEID>_site_production_today` | kWh | Site meters: today's production, all inverters |
+| `sensor.solaredge_site_<SITEID>_site_consumption_today` | kWh | Site meters: today's consumption (production + import − export without a consumption meter) |
+| `sensor.solaredge_site_<SITEID>_grid_import_today` | kWh | Site meters: today's import from the grid |
+| `sensor.solaredge_site_<SITEID>_grid_export_today` | kWh | Site meters: today's export to the grid |
+| `sensor.solaredge_site_<SITEID>_site_production_power` | W | Site meters: latest 15-minute production power |
+| `sensor.solaredge_site_<SITEID>_site_consumption_power` | W | Site meters: latest 15-minute consumption power |
+| `sensor.solaredge_site_<SITEID>_grid_import_power` | W | Site meters: latest 15-minute import power |
+| `sensor.solaredge_site_<SITEID>_grid_export_power` | W | Site meters: latest 15-minute export power |
 
-The four Site Overview sensors need a SolarEdge meter on the site. They are fetched hourly while the sun is up, every two hours at night, and at 23:57 so the day's last totals land: about 570 calls a month on top of the power polling. With a meter at the utility connection, use import, export and site production as the Energy dashboard's grid and solar sources.
+The site meter sensors need a SolarEdge meter on the site. They come from `/v2/sites/{siteId}/meters/telemetry` (all meters, today, 15-minute steps), fetched every 30 minutes while the sun is up, every two hours at night, and at 23:57 so the day's last totals land: about 930 calls a month. When the meters report production, the separate `/power` call is skipped and the first three sensors come from the meters too. Without import or export meters, the four totals fall back to Site Overview and the power sensors stay unknown. With a meter at the utility connection, use import, export and site production as the Energy dashboard's grid and solar sources, and the power sensors as its live rates (15-minute, so up to about 45 minutes behind).
 
 ## What you need first
 
@@ -89,7 +93,7 @@ See [`examples/automation_api_stale.yaml`](examples/automation_api_stale.yaml). 
 ## Things to know
 
 - **SolarEdge issues a new refresh token every time the old one is used.** The integration saves the new token back to its config entry after each refresh. If you write your own client and skip this, it stops working after the first refresh.
-- **Credit budget.** The free tier allows about 2,000 API credits per month. Each update is one call to `/v2/sites/{siteId}/power`, which returns the whole day in 15-minute steps, so current power, today's energy and today's peak all come from one request. The default of every **30 minutes** is about 1,440 calls a month. Every 15 minutes all day (about 2,900) goes over the limit and you'll start seeing 429 errors, unless you also turn on **Only poll while the sun is up**. Site Overview adds about 570 calls a month, so with it the 30-minute default needs **Only poll while the sun is up** (about 720 + 570).
+- **Credit budget.** The free tier allows about 2,000 API credits per month. Each update is one call to `/v2/sites/{siteId}/power`, which returns the whole day in 15-minute steps, so current power, today's energy and today's peak all come from one request. The default of every **30 minutes** is about 1,440 calls a month. Every 15 minutes all day (about 2,900) goes over the limit and you'll start seeing 429 errors, unless you also turn on **Only poll while the sun is up**. The site meters add about 930 calls a month, so with them the 30-minute default needs **Only poll while the sun is up** (about 720 + 930), unless the meters report production and replace the `/power` call.
 - **If authentication breaks** (401 errors, or the token refresh fails), HA flags the integration as needing re-authentication. Get a new refresh token using the steps above and paste it into the re-authenticate prompt.
 - **Not needed:** an entry under Application Credentials, or the old built-in `solaredge` integration. Remove any left over from earlier attempts.
 
